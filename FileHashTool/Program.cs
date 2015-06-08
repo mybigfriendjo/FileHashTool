@@ -38,14 +38,14 @@ namespace FileHashTool {
 				string cleanArgument = args[i].Trim().ToLower().Replace("/", "").Replace("-", "");
 
 				switch (cleanArgument) {
-					case "help":
+					case "help": // show help
 					case "?":
 						printHelp();
 						return;
-					case "v":
+					case "v": // verbose output
 						verboseFlag = true;
 						break;
-					case "g":
+					case "g": // generate
 						generateFlag = true;
 						if (i == args.Length - 2) {
 							writeError("'g' benoetigt zwei Pfadangaben.");
@@ -57,7 +57,7 @@ namespace FileHashTool {
 						i++;
 						sourceHash = args[i];
 						break;
-					case "f":
+					case "f": // output file
 						outputToFileFlag = true;
 						if (i == args.Length - 1) {
 							writeError("'f' benoetigt eine Pfadangabe.");
@@ -67,7 +67,7 @@ namespace FileHashTool {
 						i++;
 						outputFilePath = args[i];
 						break;
-					case "c":
+					case "c": // compare
 						compareFlag = true;
 						if (i == args.Length - 2) {
 							writeError("'c' benoetigt 2 Pfadangaben.");
@@ -79,7 +79,7 @@ namespace FileHashTool {
 						i++;
 						targetFolder = args[i];
 						break;
-					default:
+					default: // unknown argument
 						writeError("Unbekanntes Argument");
 						writeError("Aufruf mit /? oder /help um vorhandene Optionen zu zeigen");
 						return;
@@ -99,7 +99,45 @@ namespace FileHashTool {
 		}
 
 		private static void compareHashWithPath() {
-			throw new NotImplementedException();
+			string[] hashLines = File.ReadAllLines(sourceHash, Encoding.UTF8);
+			List<string> cleanLines = cleanupLines(hashLines);
+
+			if (cleanLines.Count == 0) {
+				writeError("Keine Eintraege im HashFile");
+				return;
+			}
+			if (cleanLines.Count == 1) {
+				Console.WriteLine("Nur ein Eintrag im Hash-File. Pfad wird als Filepfad interpretiert");
+				if (!File.Exists(targetFolder)) {
+					writeError("Angegebenes File existiert nicht");
+					return;
+				}
+				string[] fileInfo = cleanLines[0].Split(new string[] { "|"}, StringSplitOptions.None);
+				byte[] contentBytes = File.ReadAllBytes(targetFolder);
+				if (Int32.Parse(fileInfo[1]) != contentBytes.Length) {
+					// TODO: implement this method stub
+				}
+			} else {
+				if (!Directory.Exists(targetFolder)) {
+					writeError("Angegebener Ordnerpfad existiert nicht");
+					return;
+				}
+				// TODO: implement this method stub
+			}
+		}
+
+		private static List<string> cleanupLines(string[] hashLines) {
+			List<string> temp = new List<string>();
+			foreach (string line in hashLines) {
+				if (line.Trim().Length == 0) {
+					continue;
+				}
+				if (line.Trim().StartsWith(";")) {
+					continue;
+				}
+				temp.Add(line);
+			}
+			return temp;
 		}
 
 		private static void generateHash(string path) {
@@ -133,7 +171,7 @@ namespace FileHashTool {
 			hashContent = new StringBuilder();
 			foreach (string fileToHash in filenames) {
 				byte[] fileContent = File.ReadAllBytes(fileToHash);
-				hashContent.AppendLine(fileToHash.Substring(substringPos+1) + "|" + fileContent.Length + "|" + Convert.ToBase64String(murmur.ComputeHash(fileContent)));
+				hashContent.AppendLine(fileToHash.Substring(substringPos + 1) + "|" + fileContent.Length + "|" + Convert.ToBase64String(murmur.ComputeHash(fileContent)));
 				generateCounter++;
 				if (generateCounter % 100 == 0) {
 					Console.WriteLine("Verarbeite " + generateCounter + " von " + filenames.Length + " Files");
