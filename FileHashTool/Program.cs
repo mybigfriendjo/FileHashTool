@@ -20,15 +20,12 @@ namespace FileHashTool {
 
 		private static StringBuilder hashContent = null;
 		private static int generateCounter = 0;
+		private static int notFoundCounter = 0;
+		private static int differentCounter = 0;
 
 		static MurMurHash3 murmur = new MurMurHash3();
 
 		static void Main(string[] args) {
-
-			// ------- DELETE FOR PROD
-			args = new string[] { "/g", "C:\\tools", "c:\\temp\\hash.txt" };
-			// ------- END DELETE FOR PROD
-
 			if (args == null || args.Length == 0) {
 				writeError("Keine Argumente gefunden.");
 				writeError("Aufruf mit /? oder /help um vorhandene Optionen zu zeigen");
@@ -56,6 +53,12 @@ namespace FileHashTool {
 						targetFolder = args[i];
 						i++;
 						sourceHash = args[i];
+
+						if (!pathExists(targetFolder)) {
+							writeError("Pfad '" + targetFolder + "' wurde nicht gefunden!");
+							return;
+						}
+
 						break;
 					case "f": // output file
 						outputToFileFlag = true;
@@ -66,6 +69,16 @@ namespace FileHashTool {
 						}
 						i++;
 						outputFilePath = args[i];
+
+						if (isDirectory(outputFilePath)) {
+							writeError("Pfad '" + outputFilePath + "'ist ein existierender Ordner!");
+							return;
+						}
+						string dirPath = Path.GetDirectoryName(outputFilePath);
+						if (!Directory.Exists(dirPath)) {
+							Directory.CreateDirectory(dirPath);
+						}
+						File.WriteAllText(outputFilePath, "", Encoding.UTF8);
 						break;
 					case "c": // compare
 						compareFlag = true;
@@ -78,6 +91,20 @@ namespace FileHashTool {
 						sourceHash = args[i];
 						i++;
 						targetFolder = args[i];
+
+						if (!File.Exists(sourceHash)) {
+							writeError("Pfad '" + sourceHash + "' existiert nicht oder ist kein File!");
+							return;
+						}
+						if (isDirectory(sourceHash)) {
+							writeError("Pfad '" + sourceHash + "' ist ein Ordner!");
+							return;
+						}
+						if (!pathExists(targetFolder)) {
+							writeError("Pfad '" + targetFolder + "' wurde nicht gefunden!");
+							return;
+						}
+
 						break;
 					default: // unknown argument
 						writeError("Unbekanntes Argument");
@@ -91,7 +118,7 @@ namespace FileHashTool {
 				return;
 			}
 			if (generateFlag) {
-				generateHash(targetFolder);
+				generateHash();
 			}
 			if (compareFlag) {
 				compareHashWithPath();
@@ -107,22 +134,54 @@ namespace FileHashTool {
 				return;
 			}
 			if (cleanLines.Count == 1) {
-				Console.WriteLine("Nur ein Eintrag im Hash-File. Pfad wird als Filepfad interpretiert");
+				write("Nur ein Eintrag im Hash-File. Pfad wird als Filepfad interpretiert");
 				if (!File.Exists(targetFolder)) {
 					writeError("Angegebenes File existiert nicht");
 					return;
 				}
-				string[] fileInfo = cleanLines[0].Split(new string[] { "|"}, StringSplitOptions.None);
-				byte[] contentBytes = File.ReadAllBytes(targetFolder);
-				if (Int32.Parse(fileInfo[1]) != contentBytes.Length) {
-					// TODO: implement this method stub
-				}
+				string[] fileInfo = cleanLines[0].Split(new string[] { "|" }, StringSplitOptions.None);
+				compare(fileInfo[2], fileInfo[1], targetFolder);
+				write("Vergleichen von '" + targetFolder + "' abgeschlossen");
 			} else {
 				if (!Directory.Exists(targetFolder)) {
 					writeError("Angegebener Ordnerpfad existiert nicht");
 					return;
 				}
-				// TODO: implement this method stub
+
+				if (targetFolder.EndsWith("\\") || targetFolder.EndsWith("/")) {
+					targetFolder = targetFolder.Substring(0, targetFolder.Length - 1);
+				}
+				
+				foreach (string line in cleanLines) {
+					string[] fileInfo = line.Split(new string[] { "|" }, StringSplitOptions.None);
+					compare(fileInfo[2], fileInfo[1], targetFolder + "\\" + fileInfo[0]);
+				}
+				write("Vergleichen von " + cleanLines.Count + " Dateien abgeschlossen");
+				write(notFoundCounter + " Dateien nicht gefunden");
+				write(differentCounter + " Dateien unterschiedlich");
+			}
+		}
+
+		private static void compare(string hash, string size, string filename) {
+			if (!File.Exists(filename)) {
+				writeCompareError("'" + filename + "' existiert nicht.");
+				notFoundCounter++;
+				return;
+			}
+			byte[] contentBytes = File.ReadAllBytes(filename);
+			if (Int32.Parse(size) != contentBytes.Length) {
+				writeCompareError("'" + filename + "' hat eine andere Dateigroesse.");
+				differentCounter++;
+				return;
+			}
+			string calculatedHash = getHash(contentBytes);
+			if (!hash.Equals(calculatedHash)) {
+				writeCompareError("'" + filename + "' hat einen anderen Hash. ('" + hash + "' <> '" + calculatedHash + "')");
+				differentCounter++;
+				return;
+			}
+			if (verboseFlag) {
+				writeCompareInfo("'" + filename + "' hat gleichen Hash. ('" + hash + "' <> '" + calculatedHash + "')");
 			}
 		}
 
@@ -140,22 +199,30 @@ namespace FileHashTool {
 			return temp;
 		}
 
-		private static void generateHash(string path) {
-			if (!File.Exists(path) && !Directory.Exists(path)) {
-				writeError("Pfad '" + path + "'wurde nicht gefunden!");
-				return;
+		private static bool isDirectory(string path) {
+			if (!pathExists(path)) {
+				return false;
 			}
-
 			FileAttributes attr = File.GetAttributes(path);
+			if (attr.HasFlag(FileAttributes.Directory)) {
+				return true;
+			}
+			return false;
+		}
+
+		private static bool pathExists(string path) {
+			return (Directory.Exists(path) || File.Exists(path));
+		}
+
+		private static void generateHash() {
 			string[] filenames;
 			int substringPos = 0;
-			if (attr.HasFlag(FileAttributes.Directory)) {
-				filenames = Directory.GetFiles(path, "*", SearchOption.AllDirectories);
-				substringPos = path.Length;
+			if (isDirectory(targetFolder)) {
+				filenames = Directory.GetFiles(targetFolder, "*", SearchOption.AllDirectories);
+				substringPos = targetFolder.Length;
 			} else {
-				filenames = new string[] { path };
+				filenames = new string[] { targetFolder };
 			}
-
 
 			if (Directory.Exists(sourceHash)) {
 				writeError("Der zweite Pfad von 'g' muss ein gueltiger Dateiname sein (kein Ordner)");
@@ -171,10 +238,10 @@ namespace FileHashTool {
 			hashContent = new StringBuilder();
 			foreach (string fileToHash in filenames) {
 				byte[] fileContent = File.ReadAllBytes(fileToHash);
-				hashContent.AppendLine(fileToHash.Substring(substringPos + 1) + "|" + fileContent.Length + "|" + Convert.ToBase64String(murmur.ComputeHash(fileContent)));
+				hashContent.AppendLine(fileToHash.Substring(substringPos + 1) + "|" + fileContent.Length + "|" + getHash(fileContent));
 				generateCounter++;
 				if (generateCounter % 100 == 0) {
-					Console.WriteLine("Verarbeite " + generateCounter + " von " + filenames.Length + " Files");
+					write("Verarbeite " + generateCounter + " von " + filenames.Length + " Files");
 				}
 				if (generateCounter % 500 == 0) {
 					File.AppendAllText(sourceHash, hashContent.ToString(), Encoding.UTF8);
@@ -182,37 +249,79 @@ namespace FileHashTool {
 				}
 			}
 			File.AppendAllText(sourceHash, hashContent.ToString(), Encoding.UTF8);
-			Console.WriteLine("Fertig mit der Verarbeitung von " + filenames.Length + " Files");
-			Console.WriteLine("Hash-File wurde erstellt unter '" + sourceHash + "'");
+			write("Fertig mit der Verarbeitung von " + filenames.Length + " Files");
+			write("Hash-File wurde erstellt unter '" + sourceHash + "'");
 		}
+
+		private static string getHash(byte[] fileContent) {
+			return Convert.ToBase64String(murmur.ComputeHash(fileContent));
+		}
+
 
 		private static void printHelp() {
 			string appName = Process.GetCurrentProcess().ProcessName;
 
-			ConsoleColor current = Console.ForegroundColor;
-			Console.ForegroundColor = ConsoleColor.Yellow;
+			StringBuilder helpText = new StringBuilder();
 
-			Console.WriteLine(appName + ".exe [/v] [/f <path>] (/g <path1> <path2>|/c <path1> <path2>)");
-			Console.WriteLine("    v    - Verbose, aktiviert Ausgabe aller Files statt nur Fehler");
-			Console.WriteLine("    f    - leitet die Ausgabe in das angegebene File um");
-			Console.WriteLine("           (File wird ueberschrieben!)");
-			Console.WriteLine("    g    - generiert ein Hash-File für die angegebene Datei.");
-			Console.WriteLine("           Ist der Pfad ein Ordner wird von jeder Datei");
-			Console.WriteLine("           (inkl. Unterordner) ein Hash erstellt");
-			Console.WriteLine("           <path2> = Pfad wo die Hash-Datei erstellt wird.");
-			Console.WriteLine("    c    - Validiert ein File oder einen Ordner anhand eines");
-			Console.WriteLine("           vorher generiertem Hash-Files");
-			Console.WriteLine("           <path1> = das Hash-File");
-			Console.WriteLine("           <path2> der/das zu validierende Ordner/File");
+			helpText.AppendLine(appName + ".exe [/v] [/f <path>] (/g <path1> <path2>|/c <path1> <path2>)");
+			helpText.AppendLine("    v    - Verbose, aktiviert Ausgabe aller Files statt nur Fehler");
+			helpText.AppendLine("    f    - leitet die Ausgabe in das angegebene File um");
+			helpText.AppendLine("           (File wird ueberschrieben!)");
+			helpText.AppendLine("    g    - generiert ein Hash-File für die angegebene Datei.");
+			helpText.AppendLine("           Ist der Pfad ein Ordner wird von jeder Datei");
+			helpText.AppendLine("           (inkl. Unterordner) ein Hash erstellt");
+			helpText.AppendLine("           <path2> = Pfad wo die Hash-Datei erstellt wird.");
+			helpText.AppendLine("    c    - Validiert ein File oder einen Ordner anhand eines");
+			helpText.AppendLine("           vorher generiertem Hash-Files");
+			helpText.AppendLine("           <path1> = das Hash-File");
+			helpText.AppendLine("           <path2> der/das zu validierende Ordner/File");
 
-			Console.ForegroundColor = current;
+			setConsoleColor(ConsoleColor.Yellow);
+			textOutput(helpText.ToString());
+			unsetConsoleColor();
 		}
 
-		private static void writeError(string errorText) {
-			ConsoleColor current = Console.ForegroundColor;
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine(errorText);
-			Console.ForegroundColor = current;
+		private static ConsoleColor currentConsoleColor = Console.ForegroundColor;
+
+		private static void setConsoleColor(ConsoleColor color) {
+			ConsoleColor currentConsoleColor = Console.ForegroundColor;
+			Console.ForegroundColor = color;
 		}
+		private static void unsetConsoleColor() {
+			Console.ForegroundColor = currentConsoleColor;
+		}
+
+		private static void write(string text) {
+			setConsoleColor(ConsoleColor.White);
+			textOutput(text);
+			unsetConsoleColor();
+		}
+
+		private static void writeCompareError(string text) {
+			setConsoleColor(ConsoleColor.Red);
+			textOutput("[COMPERR] " + text);
+			unsetConsoleColor();
+		}
+
+		private static void writeCompareInfo(string text) {
+			setConsoleColor(ConsoleColor.Green);
+			textOutput("[COMPINF] " + text);
+			unsetConsoleColor();
+		}
+
+		private static void writeError(string text) {
+			setConsoleColor(ConsoleColor.Red);
+			textOutput("[ERROR] " + text);
+			unsetConsoleColor();
+		}
+
+		private static void textOutput(string text) {
+			if (outputToFileFlag == false) {
+				Console.WriteLine(text);
+			} else {
+				File.AppendAllText(outputFilePath, text + Environment.NewLine, Encoding.UTF8);
+			}
+		}
+
 	}
 }
