@@ -26,6 +26,8 @@ namespace FileHashTool {
 		static MurMurHash3 murmur = new MurMurHash3();
 
 		static void Main(string[] args) {
+			args = new string[] { "c", "c:\\temp\\hash.txt", "c:\\tools" };
+
 			if (args == null || args.Length == 0) {
 				writeError("Keine Argumente gefunden.");
 				writeError("Aufruf mit /? oder /help um vorhandene Optionen zu zeigen");
@@ -151,7 +153,7 @@ namespace FileHashTool {
 				if (targetFolder.EndsWith("\\") || targetFolder.EndsWith("/")) {
 					targetFolder = targetFolder.Substring(0, targetFolder.Length - 1);
 				}
-				
+
 				foreach (string line in cleanLines) {
 					string[] fileInfo = line.Split(new string[] { "|" }, StringSplitOptions.None);
 					compare(fileInfo[2], fileInfo[1], targetFolder + "\\" + fileInfo[0]);
@@ -224,7 +226,7 @@ namespace FileHashTool {
 				filenames = new string[] { targetFolder };
 			}
 
-			if (Directory.Exists(sourceHash)) {
+			if (isDirectory(sourceHash)) {
 				writeError("Der zweite Pfad von 'g' muss ein gueltiger Dateiname sein (kein Ordner)");
 				return;
 			}
