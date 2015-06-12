@@ -154,6 +154,9 @@ namespace FileHashTool {
 					targetFolder = targetFolder.Substring(0, targetFolder.Length - 1);
 				}
 
+				// DELETE
+				File.WriteAllText("C:\\temp\\bytesOf1.txt", "", Encoding.UTF8);
+				// DELETE
 				foreach (string line in cleanLines) {
 					string[] fileInfo = line.Split(new string[] { "|" }, StringSplitOptions.None);
 					compare(fileInfo[2], fileInfo[1], targetFolder + "\\" + fileInfo[0]);
@@ -171,6 +174,14 @@ namespace FileHashTool {
 				return;
 			}
 			byte[] contentBytes = File.ReadAllBytes(filename);
+
+			// --- DELETE
+			foreach (byte part in contentBytes) {
+				File.AppendAllText("C:\\temp\\bytesOf1.txt", part + ",", Encoding.UTF8);
+			}
+			File.AppendAllText("C:\\temp\\bytesOf1.txt", Environment.NewLine, Encoding.UTF8);
+			// --- DELETE
+
 			if (Int32.Parse(size) != contentBytes.Length) {
 				writeCompareError("'" + filename + "' hat eine andere Dateigroesse.");
 				differentCounter++;
