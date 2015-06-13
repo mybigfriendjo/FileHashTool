@@ -1,9 +1,10 @@
-﻿using FileHashTool.hash;
+﻿using Murmur;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,10 +24,12 @@ namespace FileHashTool {
 		private static int notFoundCounter = 0;
 		private static int differentCounter = 0;
 
-		static MurMurHash3 murmur = new MurMurHash3();
+		private static List<string> filesInFolder = new List<string>();
+
+		private static HashAlgorithm murmur = MurmurHash.Create128(managed: false);
 
 		static void Main(string[] args) {
-			args = new string[] { "c", "c:\\temp\\hash.txt", "c:\\tools" };
+			args = new string[] { "g", "d:\\", "x:\\temp\\hash.txt" };
 
 			if (args == null || args.Length == 0) {
 				writeError("Keine Argumente gefunden.");
@@ -154,9 +157,6 @@ namespace FileHashTool {
 					targetFolder = targetFolder.Substring(0, targetFolder.Length - 1);
 				}
 
-				// DELETE
-				File.WriteAllText("C:\\temp\\bytesOf1.txt", "", Encoding.UTF8);
-				// DELETE
 				foreach (string line in cleanLines) {
 					string[] fileInfo = line.Split(new string[] { "|" }, StringSplitOptions.None);
 					compare(fileInfo[2], fileInfo[1], targetFolder + "\\" + fileInfo[0]);
@@ -173,14 +173,16 @@ namespace FileHashTool {
 				notFoundCounter++;
 				return;
 			}
-			byte[] contentBytes = File.ReadAllBytes(filename);
-
-			// --- DELETE
-			foreach (byte part in contentBytes) {
-				File.AppendAllText("C:\\temp\\bytesOf1.txt", part + ",", Encoding.UTF8);
+			byte[] contentBytes = null;
+			try {
+				contentBytes = File.ReadAllBytes(filename);
+			} catch (UnauthorizedAccessException ex) {
+				writeError("'" + filename + "' konnte nicht gelesen werden. Zugriff verweigert!");
+				return;
+			} catch (IOException ex) {
+				writeError("'" + filename + "' konnte nicht gelesen werden. Zugriff verweigert oder Datei in Zugriff!");
+				return;
 			}
-			File.AppendAllText("C:\\temp\\bytesOf1.txt", Environment.NewLine, Encoding.UTF8);
-			// --- DELETE
 
 			if (Int32.Parse(size) != contentBytes.Length) {
 				writeCompareError("'" + filename + "' hat eine andere Dateigroesse.");
@@ -231,7 +233,8 @@ namespace FileHashTool {
 			string[] filenames;
 			int substringPos = 0;
 			if (isDirectory(targetFolder)) {
-				filenames = Directory.GetFiles(targetFolder, "*", SearchOption.AllDirectories);
+				getAllFilesIncludingSubfolders(targetFolder);
+				filenames = filesInFolder.ToArray();
 				substringPos = targetFolder.Length;
 			} else {
 				filenames = new string[] { targetFolder };
@@ -250,8 +253,17 @@ namespace FileHashTool {
 
 			hashContent = new StringBuilder();
 			foreach (string fileToHash in filenames) {
-				byte[] fileContent = File.ReadAllBytes(fileToHash);
-				hashContent.AppendLine(fileToHash.Substring(substringPos + 1) + "|" + fileContent.Length + "|" + getHash(fileContent));
+				byte[] fileContent = null;
+				try {
+					fileContent = File.ReadAllBytes(fileToHash);
+				} catch (UnauthorizedAccessException ex) {
+					writeError("'" + fileToHash + "' konnte nicht gelesen werden. Zugriff verweigert!");
+					continue;
+				} catch	(IOException ex){
+					writeError("'" + fileToHash + "' konnte nicht gelesen werden. Zugriff verweigert oder Datei in Zugriff!");
+					continue;
+				}
+				hashContent.AppendLine(fileToHash.Substring(substringPos) + "|" + fileContent.Length + "|" + getHash(fileContent));
 				generateCounter++;
 				if (generateCounter % 100 == 0) {
 					write("Verarbeite " + generateCounter + " von " + filenames.Length + " Files");
@@ -266,10 +278,33 @@ namespace FileHashTool {
 			write("Hash-File wurde erstellt unter '" + sourceHash + "'");
 		}
 
-		private static string getHash(byte[] fileContent) {
-			return Convert.ToBase64String(murmur.ComputeHash(fileContent));
+		private static void getAllFilesIncludingSubfolders(string path) {
+			if (isDirectory(path)) {
+				try {
+					foreach (string dir in Directory.GetDirectories(path)) {
+						getAllFilesIncludingSubfolders(dir);
+					}
+					foreach (string file in Directory.GetFiles(path)) {
+						getAllFilesIncludingSubfolders(file);
+					}
+				} catch (UnauthorizedAccessException ex) {
+					writeError("'" + path + "' konnte nicht gelesen werden. Zugriff verweigert!");
+					return;
+				} catch (IOException ex) {
+					writeError("'" + path + "' konnte nicht gelesen werden. Zugriff verweigert oder Datei in Zugriff!");
+					return;
+				}
+			} else {
+				filesInFolder.Add(path);
+			}
 		}
 
+		private static string getHash(byte[] fileContent) {
+			if (fileContent.Length == 0) {
+				return "0";
+			}
+			return Convert.ToBase64String(murmur.ComputeHash(fileContent));
+		}
 
 		private static void printHelp() {
 			string appName = Process.GetCurrentProcess().ProcessName;
