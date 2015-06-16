@@ -1,4 +1,5 @@
-﻿using Murmur;
+﻿using FileHashTool.dependencies;
+using Murmur;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -29,6 +30,11 @@ namespace FileHashTool {
 		private static HashAlgorithm murmur = MurmurHash.Create128(managed: false);
 
 		static void Main(string[] args) {
+			string refSQLitedll = "MurmurHash.dll";
+			EmbeddedAssembly.Load("FileHashTool." + refSQLitedll, refSQLitedll);
+			AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(CurrentDomain_AssemblyResolve);
+
+
 			args = new string[] { "g", "d:\\", "x:\\temp\\hash.txt" };
 
 			if (args == null || args.Length == 0) {
@@ -128,6 +134,10 @@ namespace FileHashTool {
 			if (compareFlag) {
 				compareHashWithPath();
 			}
+		}
+
+		private static System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args) {
+			return EmbeddedAssembly.Get(args.Name);
 		}
 
 		private static void compareHashWithPath() {
