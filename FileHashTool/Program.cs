@@ -342,7 +342,7 @@ namespace FileHashTool {
 		private static ConsoleColor currentConsoleColor = Console.ForegroundColor;
 
 		private static void setConsoleColor(ConsoleColor color) {
-			ConsoleColor currentConsoleColor = Console.ForegroundColor;
+			currentConsoleColor = Console.ForegroundColor;
 			Console.ForegroundColor = color;
 		}
 		private static void unsetConsoleColor() {
